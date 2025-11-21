@@ -1,8 +1,8 @@
 path: ./data
 
-train: C:/Users/rodle/OneDrive/Documentos/GitHub/ProyectoFinal_DL/data/images/train
-val: C:/Users/rodle/OneDrive/Documentos/GitHub/ProyectoFinal_DL/data/images/val
-test: C:/Users/rodle/OneDrive/Documentos/GitHub/ProyectoFinal_DL/data/images/test
+train: C:\Users\Alexis Mesias\OneDrive\UVG8VO\DeepLearning\ProyectoFinal_DL\data\images\train
+val: C:\Users\Alexis Mesias\OneDrive\UVG8VO\DeepLearning\ProyectoFinal_DL\data\images\val
+test: C:\Users\Alexis Mesias\OneDrive\UVG8VO\DeepLearning\ProyectoFinal_DL\data\images\test
 
 names:
   0: coca_cola
