@@ -18,7 +18,7 @@ except ImportError:
 DATA_CONFIG = "shelfvision.yaml"  # archivo YAML de dataset
 BASE_MODEL = "yolov8n.pt"         # se puede cambiar a yolov8s.pt
 RUNS_DIR = "runs_shelfvision"     # carpeta donde guarda resultados
-RUN_NAME = "yolov8n_shelfvision"  # nombre del experimento
+RUN_NAME = "yolov8n_shelfvision3"  # nombre del experimento
 
 TEST_IMAGES_DIR = os.path.join("data", "images", "test")
 TEST_LABELS_DIR = os.path.join("data", "labels", "test")
@@ -63,7 +63,7 @@ def evaluate_detection():
     """
     Evalúa el modelo en val/test y muestra métricas de detección (mAP, F1, etc.).
     """
-    weights_path = os.path.join(RUNS_DIR, "detect", RUN_NAME, "weights", "best.pt")
+    weights_path = os.path.join(RUNS_DIR, RUN_NAME, "weights", "best.pt")
     if not os.path.exists(weights_path):
         raise FileNotFoundError(f"No se encontró {weights_path}. Entrena el modelo primero.")
 
@@ -108,7 +108,7 @@ def evaluate_count_mae():
     """
     Calcula el MAE de conteo en el conjunto de test.
     """
-    weights_path = os.path.join(RUNS_DIR, "detect", RUN_NAME, "weights", "best.pt")
+    weights_path = os.path.join(RUNS_DIR, RUN_NAME, "weights", "best.pt")
     if not os.path.exists(weights_path):
         raise FileNotFoundError(f"No se encontró {weights_path}. Entrena el modelo primero.")
 
@@ -121,6 +121,7 @@ def evaluate_count_mae():
     image_files = []
     for ext in ("*.jpg", "*.jpeg", "*.png"):
         image_files.extend(glob(os.path.join(TEST_IMAGES_DIR, ext)))
+
 
     if not image_files:
         raise FileNotFoundError(f"No se encontraron imágenes en {TEST_IMAGES_DIR}")
@@ -167,7 +168,62 @@ def evaluate_count_mae():
 
 
 # =========================
-# 4. DEMO CON GRADIO
+# 4. EXPLICABILIDAD (CAM)
+# =========================
+
+def explain_with_cam(image_path: str,
+                     method: str = "EigenCAM",
+                     out_dir: str = "xai_outputs"):
+    """
+    Genera un heatmap CAM (EigenCAM, GradCAM++, etc.)
+    sobre una imagen usando best.pt.
+
+    Requiere:
+        pip install YOLOv8-Explainer
+    """
+    weights_path = os.path.join(RUNS_DIR, RUN_NAME, "weights", "best.pt")
+    if not os.path.exists(weights_path):
+        raise FileNotFoundError(f"No se encontró {weights_path}. Entrena el modelo primero.")
+
+    if not os.path.exists(image_path):
+        raise FileNotFoundError(f"No existe la imagen: {image_path}")
+
+    os.makedirs(out_dir, exist_ok=True)
+
+    # Import lazy para no obligar a tener el paquete en otros modos
+    try:
+        from YOLOv8_Explainer import yolov8_heatmap
+    except ImportError:
+        raise ImportError(
+            "No tienes YOLOv8-Explainer instalado. "
+            "Instala con: pip install YOLOv8-Explainer"
+        )
+
+    # Config siguiendo la docs del paquete
+    cam_model = yolov8_heatmap(
+        weight=weights_path,
+        conf_threshold=CONF_THRESH,
+        method=method,                  # "EigenCAM", "GradCAMPlusPlus", etc.
+        layer=[10, 12, 14, 16, 18, -3], # capas sugeridas por el paquete
+        ratio=0.02,
+        show_box=True,
+        renormalize=False,
+    )
+
+    # Ejecuta CAM
+    images = cam_model(img_path=image_path)
+
+    # Guarda outputs
+    for i, im in enumerate(images):
+        save_path = os.path.join(out_dir, f"cam_{method}_{i}.png")
+        im.save(save_path)
+        print("Heatmap guardado en:", save_path)
+
+    return images
+
+
+# =========================
+# 5. DEMO CON GRADIO
 # =========================
 
 def launch_demo():
@@ -178,7 +234,7 @@ def launch_demo():
     if not GRADIO_AVAILABLE:
         raise ImportError("Gradio no está instalado. Ejecuta: pip install gradio")
 
-    weights_path = os.path.join(RUNS_DIR, "detect", RUN_NAME, "weights", "best.pt")
+    weights_path = os.path.join(RUNS_DIR, RUN_NAME, "weights", "best.pt")
     if not os.path.exists(weights_path):
         raise FileNotFoundError(f"No se encontró {weights_path}. Entrena el modelo primero.")
 
@@ -227,10 +283,18 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Proyecto ShelfVision")
     parser.add_argument("--mode", type=str, default="train",
-                        choices=["train", "eval_det", "eval_count", "demo"],
+                        choices=["train", "eval_det", "eval_count", "demo", "explain"],
                         help="Modo de ejecución")
     parser.add_argument("--epochs", type=int, default=50, help="Número de épocas para entrenamiento")
     parser.add_argument("--batch", type=int, default=8, help="Batch size")
+
+    # argumentos para explain
+    parser.add_argument("--img", type=str, default=None,
+                        help="Ruta a una imagen para generar CAM")
+    parser.add_argument("--method", type=str, default="EigenCAM",
+                        choices=["EigenCAM","GradCAM","GradCAMPlusPlus","XGradCAM",
+                                 "LayerCAM","EigenGradCAM","HiResCAM"],
+                        help="Método CAM a usar")
 
     args = parser.parse_args()
 
@@ -242,3 +306,7 @@ if __name__ == "__main__":
         evaluate_count_mae()
     elif args.mode == "demo":
         launch_demo()
+    elif args.mode == "explain":
+        if args.img is None:
+            raise ValueError("Debes pasar --img con la ruta de una imagen.")
+        explain_with_cam(args.img, method=args.method)
